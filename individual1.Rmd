@@ -1,5 +1,5 @@
 ---
-title: "individual1"
+title: "Lab 5 - individual1"
 author: "Joel Martin"
 date: "11/8/2020"
 output: html_document
@@ -9,22 +9,92 @@ output: html_document
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-## R Markdown
 
-This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+```{r}
+accident <- read.csv("https://raw.githubusercontent.com/xdaiISU/ds202materials/master/hwlabs/fars2017/accident.csv", stringsAsFactors = FALSE)
+person <- read.csv("https://raw.githubusercontent.com/xdaiISU/ds202materials/master/hwlabs/fars2017/person.csv", stringsAsFactors = FALSE)
+library(tidyverse)
+stateCodes <- read.csv('stateCodes.csv')
+stateCodes$State <- tolower(stateCodes$State)
+makeCodes <- read.csv('makeCodes.csv')
+```
+## Question 1
 
-When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+Created a graph showing the number of accidents for each day of the week.
 
-```{r cars}
-summary(cars)
+```{r}
+ggplot(accident, aes(x = factor(DAY_WEEK))) + geom_bar() + scale_x_discrete(labels = c('Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'))+ xlab('Day of the Week') + ylab('Number of Accidents')
 ```
 
-## Including Plots
+It appears that most accidents happen on the weekend with Saturday having the highest number of accidents.
 
-You can also embed plots, for example:
+## Question 2
 
-```{r pressure, echo=FALSE}
-plot(pressure)
+Created data frame FIP (Fatal Injury Persons) containing the people who had fatal injuries which are identified by the number 4 in the INJ_SEV column in the person data frame.
+
+```{r}
+FIP <- subset(person, INJ_SEV == 4)
 ```
 
-Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+## Question 3
+
+Created data frame DV (Dangerous Vehicles) containing the most dangerous vehicle make in each state. I set NA's that where in the MAKE column to 99 which is "Unknown Make" in the User Manual for the data since we do not know its make.
+
+```{r}
+DV <- FIP
+DV$MAKE[is.na(DV$MAKE)] <- 99
+DV <- group_by(DV, STATE, MAKE)
+DV <- summarise(DV, Fatal_Accidents = n())
+DV <- group_by(DV, STATE)
+DV <- filter(DV, Fatal_Accidents == max(Fatal_Accidents))
+```
+
+## Question 4
+
+Created graph of the U.S. showing each states most dangerous vehicle.
+
+```{r}
+states <- map_data('state')
+DV <- left_join(DV, stateCodes, by = c('STATE' = 'Codes'))
+DV <- left_join(DV, makeCodes, by = c ('MAKE' = 'Codes'))
+dangerMap <- left_join(DV, states, by = c('State' = 'region'))
+stateName <- dangerMap %>% group_by(State) %>% summarize(long=mean(long), lat=mean(lat))
+DV <- left_join(DV, stateName, by = 'State')
+ggplot(dangerMap, aes(x = long, y = lat)) + geom_polygon(aes(group=group, fill=MAKE), color = 'black') + scale_fill_distiller(name="Score", palette = "Set1") + geom_text(aes(label = Make), color = 'white', data = DV)
+```
+
+The definition of a dangerous vehicle is one that is a part of many different accidents. It appears that the most common type of dangerous vehicle was unknown makes. This may be because the vehicle was so badly damaged that it could not be figured out or it could be that these were pedestrians as they would not have had a vehicle.
+
+## Question 5
+
+Joined the accident and person work table using case number.
+
+```{r}
+df1 <- left_join(accident, person, by = 'ST_CASE')
+```
+
+## Question 6
+
+Tallied the number of accidents by day of week, hour of day, and sex.
+
+```{r}
+df1 <- df1[!(df1$HOUR.x == 99 | df1$HOUR.x == 88),]
+df1 <- group_by(df1, DAY_WEEK, HOUR.x, SEX)
+df1 <- summarise(df1, n = n())
+df1$DAY_WEEK <- as.factor(df1$DAY_WEEK)
+levels(df1$DAY_WEEK)
+levels(df1$DAY_WEEK) <- c('Sunday', 'Monday','Tuesday','Wednesday','Thursday','Friday','Saturday')
+ggplot(df1, aes(x = HOUR.x, y = n, fill = as.factor(SEX))) + geom_bar(pos = 'stack', stat = 'identity') + facet_grid(cols = vars(df1$DAY_WEEK)) + xlab('Hour of Day') + ylab('Number of Accidents') + labs(fill = 'Sex') + scale_fill_discrete(breaks = c('1', '2', '8', '9'), labels = c('Male', 'Female', 'Not Reported', 'Unknown'))
+```
+
+## Question 8
+
+```{r}
+danger <- FIP
+danger <- group_by(danger, STATE, MONTH)
+danger <- summarise(danger, Fatal_Accidents = n())
+danger$MONTH <- as.factor(danger$MONTH)
+ggplot(danger, aes(x = MONTH, y = Fatal_Accidents)) + geom_bar(stat = 'identity') + xlab('Month') + ylab('Number of Fatal Accidents') + scale_x_discrete(labels = c('January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December')) + theme(axis.text.x = element_text(angle = 45, vjust = 0.5))
+```
+
+It appears that there are more deaths in the summertime than the winter therefore making summertime more dangerous.
